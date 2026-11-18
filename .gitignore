@@ -1,0 +1,40 @@
+﻿# Challenge source data - keep private
+Cantill_FullStack_Task_Kit/
+# Local backend data
+backend/data/
+# Secrets
+.env
+.env.*
+!.env.example
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+# Frontend
+node_modules/
+dist/
+build/
+# Logs
+*.log
+logs/
+# IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+# Tests
+.coverage
+htmlcov/
+# Temporary
+tmp/
+temp/
+# Docker local overrides
+docker-compose.override.yml

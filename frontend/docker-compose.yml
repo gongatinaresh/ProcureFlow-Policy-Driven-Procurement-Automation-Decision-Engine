@@ -1,0 +1,38 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cantill-backend
+    environment:
+      APP_NAME: "Cantill Procurement API"
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+      DATABASE_URL: sqlite:////app/data/cantill.db
+      BUSINESS_TIMEZONE: Asia/Kolkata
+      POLICY_STORAGE_DIR: /app/data/policies
+      AUTO_CREATE_TABLES: "false"
+      CORS_ORIGINS: '["http://localhost:8081","http://127.0.0.1:8081"]'
+          API_PREFIX: /api
+    volumes:
+      - cantill_data:/app/data
+      - ./Cantill_FullStack_Task_Kit:/Cantill_FullStack_Task_Kit:ro
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    args:
+      VITE_API_BASE_URL: /api
+    container_name: cantill-frontend
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  cantill_data:

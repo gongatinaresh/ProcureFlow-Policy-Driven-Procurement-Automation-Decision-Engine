@@ -1,0 +1,276 @@
+{
+  "document": "CORVO-PROC-POL-04",
+  "version": "5.0",
+  "effective_from": "2026-04-01",
+  "source": "Corvo_Procurement_Policy.pdf",
+  "settings": {
+    "item_matching": {
+      "minimum_score": 0.48,
+      "ambiguity_margin": 0.08,
+      "ignored_terms": [
+        "a",
+        "an",
+        "as",
+        "per",
+        "sample",
+        "for",
+        "maintenance",
+        "urgent",
+        "repeat"
+      ],
+      "abbreviations": {
+        "brg": "bearing",
+        "pneu": "pneumatic",
+        "hyd": "hydraulic",
+        "v": "v"
+      }
+    },
+    "clubbing": {
+      "creation_window_days": 14,
+      "creation_window_inclusive": true,
+      "need_by_window_days": 7,
+      "need_by_window_inclusive": true,
+      "same_item": true,
+      "same_plant": true,
+      "emergency_urgency_value": "Emergency",
+      "unmatched_items_club": false,
+      "prefer": "earliest_qualifying_requirement"
+    },
+    "valuation": {
+      "currency": "INR",
+      "taxes_included": false,
+      "purchase_history_window_days": 365,
+      "purchase_history_window_start_inclusive": false,
+      "purchase_history_window_end_inclusive": false,
+      "price_precedence": [
+        "usable_contract_rate",
+        "lowest_applicable_contract_rate_when_none_usable",
+        "most_recent_purchase_order_price",
+        "item_standard_price"
+      ],
+      "new_item_price": "requester_estimate",
+      "currency_scale": 2
+    },
+    "contracts": {
+      "start_date_inclusive": true,
+      "end_date_inclusive": true,
+      "require_active_supplier": true,
+      "require_pdf_extraction_without_discrepancy": true,
+      "contract_usage_excluded_item_types": [
+        "Capex"
+      ],
+      "new_contract_baseline_consumed_value": "0",
+      "requirement_order": [
+        "requirement_date",
+        "first_created_at",
+        "first_pr_no",
+        "first_pr_line"
+      ],
+      "choose": "lowest_rate_with_sufficient_ceiling"
+    },
+    "preferred_suppliers": {
+      "lookback_days": 548,
+      "lookback_start_inclusive": true,
+      "lookback_end_inclusive": true,
+      "eligible_statuses": [
+        "Active"
+      ],
+      "recency_buckets": [
+        {
+          "maximum_age_days": 90,
+          "score": "1.0"
+        },
+        {
+          "maximum_age_days": 365,
+          "score": "0.5"
+        },
+        {
+          "maximum_age_days": 548,
+          "score": "0.0"
+        }
+      ],
+      "score_weights": {
+        "purchase_frequency": "0.35",
+        "recency": "0.25",
+        "contract_history": "0.20",
+        "on_time_delivery": "0.10",
+        "quality_rating": "0.10"
+      },
+      "quality_rating_maximum": "5",
+      "suggestion_top_up_weights": {
+        "on_time_delivery": "0.5",
+        "quality_rating": "0.5"
+      },
+      "blocked_statuses": [
+        "Blocked",
+        "Inactive"
+      ]
+    },
+    "decision_rules": [
+      {
+        "order": 1,
+        "clause": "5.1",
+        "name": "Capex always requires sourcing",
+        "condition": {
+          "all": [
+            {
+              "field": "item.item_type",
+              "operator": "eq",
+              "value": "Capex"
+            }
+          ]
+        },
+        "outcome": {
+          "decision": "SOURCING_REQUEST",
+          "route": "CAPEX_SOURCING",
+          "supplier_count": 5,
+          "requires_capex_approval": true
+        }
+      },
+      {
+        "order": 2,
+        "clause": "5.2",
+        "name": "Usable rate contract",
+        "condition": {
+          "all": [
+            {
+              "field": "contract.usable",
+              "operator": "eq",
+              "value": true
+            }
+          ]
+        },
+        "outcome": {
+          "decision": "PO",
+          "route": "CONTRACT_PO",
+          "supplier_source": "contract",
+          "price_source": "contract_rate"
+        }
+      },
+      {
+        "order": 3,
+        "clause": "5.3",
+        "name": "Eligible emergency direct PO",
+        "condition": {
+          "all": [
+            {
+              "field": "requirement.is_emergency",
+              "operator": "eq",
+              "value": true
+            },
+            {
+              "field": "requirement.value",
+              "operator": "lte",
+              "value_from": "thresholds.emergency_maximum_value"
+            },
+            {
+              "field": "history.recent_active_purchase",
+              "operator": "eq",
+              "value": true
+            }
+          ]
+        },
+        "outcome": {
+          "decision": "PO",
+          "route": "EMERGENCY_PO",
+          "supplier_source": "first_preferred",
+          "price_source": "preferred_reference_price"
+        }
+      },
+      {
+        "order": 4,
+        "clause": "5.4",
+        "name": "Eligible spot direct PO",
+        "condition": {
+          "all": [
+            {
+              "field": "requirement.value",
+              "operator": "lt",
+              "value_from": "thresholds.spot_maximum_value"
+            },
+            {
+              "field": "history.recent_active_purchase",
+              "operator": "eq",
+              "value": true
+            }
+          ]
+        },
+        "outcome": {
+          "decision": "PO",
+          "route": "SPOT_PO",
+          "supplier_source": "first_preferred",
+          "price_source": "preferred_reference_price"
+        }
+      },
+      {
+        "order": 5,
+        "clause": "5.5",
+        "name": "Request for quotation",
+        "condition": {
+          "all": [
+            {
+              "field": "requirement.value",
+              "operator": "lt",
+              "value_from": "thresholds.rfp_minimum_value"
+            }
+          ]
+        },
+        "outcome": {
+          "decision": "SOURCING_REQUEST",
+          "route": "RFQ",
+          "supplier_count": 3
+        }
+      },
+      {
+        "order": 6,
+        "clause": "5.6",
+        "name": "Request for proposal",
+        "condition": {
+          "all": [
+            {
+              "field": "requirement.value",
+              "operator": "gte",
+              "value_from": "thresholds.rfp_minimum_value"
+            }
+          ]
+        },
+        "outcome": {
+          "decision": "SOURCING_REQUEST",
+          "route": "RFP",
+          "supplier_count": 5
+        }
+      }
+    ],
+    "new_item_handling": {
+      "clause": "1.2",
+      "decision": "SOURCING_REQUEST",
+      "route": "NEW_ITEM_SOURCING",
+      "club": false,
+      "supplier_count": 0,
+      "price_source": "requester_estimate"
+    },
+    "po_consolidation": {
+      "window_hours": 24,
+      "window_inclusive": true,
+      "open_purchase_order_statuses": [
+        "draft",
+        "pending_approval"
+      ],
+      "require_same_supplier": true,
+      "require_same_plant": true,
+      "require_same_route": true,
+      "prefer": "earliest_qualifying_open_po"
+    },
+    "supplier_eligibility": {
+      "allowed_statuses": [
+        "Active"
+      ],
+      "forbid_blocked_for_po_and_sourcing": true
+    }
+  },
+  "thresholds": {
+    "emergency_maximum_value": "500000",
+    "spot_maximum_value": "200000",
+    "rfp_minimum_value": "1000000"
+  }
+}
