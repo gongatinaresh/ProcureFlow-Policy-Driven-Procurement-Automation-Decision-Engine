@@ -1,51 +1,172 @@
-# Proposed implementation approach
 
-## 1. Architecture and technology
+# Implementation Approach
 
-Use the requested stack:
+## 1. Architecture and Technology
 
-- React + TypeScript + Vite + Tailwind CSS for employee chat, policy administration and buyer workspace.
-- Python + FastAPI for APIs and orchestration.
-- SQLite + SQLAlchemy for persistent, relational application data and an auditable decision ledger.
-- Pandas for batch CSV ingestion/export and Pydantic for request, policy and row validation.
-- Pytest for policy-engine, API and integration tests.
+ProcureFlow is implemented as a policy-driven procurement decision platform with a frontend, backend API, persistent database, and deterministic procurement evaluation engine.
 
-Keep the core decision engine independent of the UI, chat model and CSV shape. Convert each intake mode into the same validated PR-line model, then run one deterministic pipeline. Use versioned policy data and stable identifiers rather than sample PR-number branches.
+### Technology Stack
 
-## 2. Policy-first implementation
+- **React + TypeScript + Vite:** Frontend application and interactive procurement workflows.
+- **Python + FastAPI:** REST API and backend business logic.
+- **SQLite + SQLAlchemy:** Persistent storage and relational data management.
+- **Pandas:** CSV processing and data handling.
+- **Pydantic:** Request validation and structured data validation.
+- **Pytest:** Automated backend testing.
+- **Alembic:** Database schema migration management.
+- **Docker Compose:** Containerized application setup and execution.
+- **Nginx:** Frontend serving and application routing within the containerized deployment.
 
-1. Encode v5.0 from the actual policy clauses into a validated, ordered policy version with explicit references to clauses 1.1-8.1.
-2. Build the policy context and generic condition evaluator before implementing decisions.
-3. Implement item matching, non-clubbing new items, clubbing, requirement valuation, contract selection/ceiling, supplier ranking, ordered routes and PO consolidation in separate testable services.
-4. Store complete run inputs, selected policy version, decision evidence, supplier evidence and contract allocations.
-5. Add policy upload/amendment as a draft/validate/explain/approve workflow. Never execute arbitrary uploaded text or accept a silently incomplete parse.
-6. Validate expected behavior against all 14 worked decisions and three supplier lists, then test boundaries and data cases not represented in those examples.
+The frontend and backend communicate through HTTP APIs. Procurement decisions are evaluated by backend logic rather than being calculated in the frontend.
 
-## 3. Planned AI usage
+---
 
-AI is optional assistance, never the source of truth for procurement outcomes.
+## 2. Policy-Driven Decision Engine
 
-- **Employee chat:** use a model through a replaceable provider adapter to extract structured candidate fields from free text and draft concise follow-up questions. Validate all outputs with Pydantic and require requester confirmation before PR creation.
-- **Item match assistance:** use normalized catalog matching and deterministic scores first. AI may suggest/rerank catalog candidates for ambiguous descriptions, but must return existing item codes only and show the evidence; user/buyer confirmation resolves uncertain matches. An unmatched request remains a new item.
-- **Policy amendment reading:** use a model to extract a proposed structured diff from uploaded policy text or a procurement chat description. Validate every rule against a safe typed schema, show source text and plain-language diff, and require Procurement approval. The deterministic evaluator applies the approved data.
-- **Contract PDF reading:** use local text extraction for the supplied searchable PDFs and validate extracted fields against the register, contract lines and supplier/item masters. AI may assist extraction of future documents but cannot activate a contract without human verification.
-- **Not AI:** valuation, ceiling allocation, policy ordering, PO/RFQ/RFP routing, preferred-supplier score calculation, blocked-supplier checks, consolidation and export generation are deterministic backend functions.
+The procurement engine is designed to evaluate requests consistently against procurement policy, master data, historical purchase information, contracts, supplier eligibility, and procurement thresholds.
 
-No model provider, deployment region or data-retention agreement is specified. Decide this before enabling any external model call. Keep the provider replaceable, keep credentials out of the repository, minimize employee data sent for extraction, retain the original human-confirmed fields, and provide a non-AI/manual review path. The fictional challenge inputs are not a reason to hard-code their answers.
+The decision process follows a structured pipeline:
 
-## 4. User experience
+1. Validate incoming procurement request data.
+2. Resolve item codes or match item descriptions against the item master.
+3. Identify eligible requirement-clubbing opportunities.
+4. Calculate requirement quantity and valuation.
+5. Evaluate available contracts and applicable contract rates.
+6. Check supplier eligibility and purchasing restrictions.
+7. Apply procurement policy rules in the defined order.
+8. Determine the applicable procurement route.
+9. Evaluate supplier selection and sourcing requirements where applicable.
+10. Produce the decision together with supporting evidence.
 
-- Employee flow: chat -> ask for missing details -> show catalog match and parsed summary -> requester confirms -> receive PR reference.
-- Buyer flow: prioritized requirement queue -> expandable source lines/evidence -> approve PO or sourcing event, resolve uncertainty, or override with a reason.
-- Procurement flow: upload/describe amendment -> view extracted change and validation warnings -> approve with effective date -> inspect immutable version history.
-- Batch flow: upload -> see row-level validation and processing summary -> inspect decisions -> download exact required CSV.
-- Use clear status and reason text. Do not present low-confidence matching or unsupported data as a successful decision.
+The engine uses deterministic logic so that the same validated inputs and policy version produce reproducible outcomes.
 
-## 5. Delivery principles
+---
 
-- Public repository; hosted app remains available for review.
-- One-command local setup, preferably Docker Compose, with seeded fictional data and no committed secrets.
-- Preserve a clean distinction among source data, derived decisions, human approvals and overrides.
-- Store policy and ranking rationale in visible decision evidence so the application can be explained and changed during the blind test.
-- Keep original runs and exports reproducible when a policy is amended or a batch is rerun.
+## 3. Policy as Data
 
+Procurement policy is separated from the decision execution logic wherever supported by the application.
+
+Policy versions and rule definitions are used to control procurement evaluation. The policy management workflow supports working with policy changes without treating every amendment as a software code change.
+
+Policy amendments must be validated and reviewed before they are relied upon for procurement decisions.
+
+The decision engine uses policy rule ordering and clause references to explain why a procurement request receives a particular route.
+
+---
+
+## 4. Conversational Procurement Intake
+
+The Employee Procurement Chat provides a guided conversational interface for creating purchase requests.
+
+The workflow collects the required procurement information through sequential questions, validates user responses, and presents a review step before submission.
+
+The chat collects information such as:
+
+- Requester details
+- Department
+- Plant
+- Item description or item code
+- Quantity
+- Unit of measurement
+- Required delivery date
+- Urgency
+- Estimated unit price, when available
+
+The chat uses a deterministic, step-based workflow. It does not depend on an external generative AI model to make procurement decisions.
+
+After confirmation, the request is submitted to the backend API and evaluated using the procurement decision engine. The resulting decision and procurement reference are displayed to the user.
+
+---
+
+## 5. Batch Processing
+
+The application supports procurement batch processing through CSV input.
+
+The batch workflow is intended to:
+
+1. Accept procurement request data.
+2. Validate the incoming records.
+3. Process procurement lines through the backend decision engine.
+4. Apply the configured procurement policy.
+5. Generate row-level decision results.
+6. Make processed results available for review and export.
+
+Batch processing and conversational intake use backend procurement logic rather than separate decision implementations.
+
+---
+
+## 6. Contracts, Suppliers, and Procurement Decisions
+
+Supplier and contract information are maintained as procurement data used during evaluation.
+
+The engine considers relevant procurement inputs, including:
+
+- Item master data
+- Supplier eligibility and status
+- Historical purchase information
+- Contract coverage
+- Contract rates
+- Contract ceilings and consumption
+- Plant and procurement requirements
+- Policy-defined procurement thresholds and routing rules
+
+Contract and supplier information contributes to procurement decisions and the supporting decision evidence.
+
+Blocked or otherwise ineligible suppliers must not be treated as valid purchasing options.
+
+---
+
+## 7. Explainability and Decision Evidence
+
+Procurement decisions should be understandable to the requester and procurement buyer.
+
+The backend decision process produces structured decision information, including the procurement route and relevant policy rationale.
+
+The application separates procurement input data from evaluated decision results, allowing decisions to be inspected rather than represented only as a final status.
+
+The objective is to make procurement outcomes traceable to the applicable business rules and inputs.
+
+---
+
+## 8. Testing and Validation
+
+The backend is tested using Pytest.
+
+Validation includes:
+
+- API health and endpoint tests
+- Request and data validation
+- Database behavior
+- Master data import
+- Policy management
+- Procurement engine decision logic
+- Workspace API behavior
+
+The frontend is validated through the production build process.
+
+The conversational procurement workflow has also been manually tested through request intake, validation, review, submission, and procurement decision response.
+
+---
+
+## 9. Deployment and Execution
+
+The application can be run using Docker Compose to bring up the frontend and backend services.
+
+The containerized workflow simplifies local setup and provides a consistent environment for running the application.
+
+The deployment configuration includes frontend serving, backend API execution, and database integration.
+
+---
+
+## 10. Design Principles and Limitations
+
+- Procurement outcomes are determined by backend business logic, not by an external AI model.
+- Procurement policy is treated as a business rule rather than hard-coded to individual sample request identifiers.
+- Input validation is performed before procurement evaluation.
+- Existing procurement records and master data are used as decision inputs.
+- Procurement decisions should be explainable through their applicable rules and data.
+- Unsupported or invalid inputs should not be silently treated as valid procurement requests.
+- Policy changes should be handled through the supported policy workflow and validated before use.
+- The application is designed to demonstrate procurement automation, policy-driven routing, and decision consistency.
+
+The conversational interface is a guided deterministic workflow rather than an open-ended AI chatbot. This keeps request collection predictable, validated, and aligned with the procurement decision process.

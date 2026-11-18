@@ -214,36 +214,56 @@ The workspace supports buyer decision workflows, including approvals and overrid
 
 
 
-\### 5. Supplier Ranking
+### 5. Supplier Ranking
 
+Supplier ranking uses a deterministic, policy-configured weighted scoring
+system based on procurement history and supplier performance.
 
+#### Preferred Supplier Scoring
 
-Supplier ranking is based on documented, deterministic logic rather than arbitrary ordering.
+| Factor | Weight | Scoring Method |
+|---|---:|---|
+| Purchase frequency | 35% | Relative purchase count for the item |
+| Purchase recency | 25% | Score based on age of the latest PO |
+| Contract history | 20% | Matching qualifying contract evidence |
+| On-time delivery | 10% | Supplier on-time percentage normalized to 0–1 |
+| Quality rating | 10% | Quality rating normalized against a maximum of 5 |
 
+#### Purchase Recency Scoring
 
+| Latest Purchase Age | Score |
+|---|---:|
+| 0–90 days | 1.0 |
+| 91–365 days | 0.5 |
+| 366–548 days | 0.0 |
 
-The ranking considers available supplier and procurement-history evidence, including:
+Purchase history is evaluated within a configurable 548-day lookback
+window, including the configured date boundaries.
 
+#### Supplier Eligibility
 
+- Only eligible supplier statuses are considered.
+- Blocked and inactive suppliers are excluded.
+- Suppliers with qualifying item-level contract history can be considered
+  even without purchase history.
+- Ranking ties are resolved using purchase count, latest purchase date,
+  and supplier ID.
 
-\- Purchase frequency
+#### Supplier Suggestions
 
-\- Purchase recency
+When additional suppliers are required, category-matching eligible
+suppliers can be added using a separate scoring mechanism based on:
 
-\- Contract evidence
+- On-time delivery: 50%
+- Quality rating: 50%
 
-\- On-time delivery
+Preferred suppliers and category-based supplier suggestions are kept
+distinct so that suggestions are not misrepresented as having purchase
+history.
 
-\- Quality rating
-
-
-
-Ranking rationale and weights are documented in `DECISIONS.md`.
-
-
-
-Preferred supplier outputs include ranked suppliers and a `top\_three` indicator for the first three positions.
-
+Ranking weights, recency buckets, and supplier eligibility are
+configured through the policy configuration rather than being
+arbitrarily hardcoded in the ranking function.
 
 
 \### 6. Contract Management

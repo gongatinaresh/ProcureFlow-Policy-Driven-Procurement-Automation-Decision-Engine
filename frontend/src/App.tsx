@@ -701,6 +701,15 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function EmployeeChatPage() {
+  const [step, setStep] = useState(0);
+  const [input, setInput] = useState("");
+  const [history, setHistory] = useState<{ role: "assistant" | "user"; text: string }[]>([
+    {
+      role: "assistant",
+      text: "Hi! I'm your Procurement Assistant. Tell me what you need to purchase, and I'll help you create a purchase request step by step.",
+    },
+  ]);
+
   const [message, setMessage] = useState("");
   const [requester, setRequester] = useState("");
   const [department, setDepartment] = useState("");
@@ -711,13 +720,105 @@ function EmployeeChatPage() {
   const [needByDate, setNeedByDate] = useState("");
   const [urgency, setUrgency] = useState("Normal");
   const [estimate, setEstimate] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ChatResult | null>(null);
-  const submit = async (event: React.FormEvent) => {
+
+  const questions = [
+    "Tell me what you need to purchase. Include the item description and any specifications you know.",
+    "Who is raising this purchase request? Please provide your name.",
+    "Which department are you from?",
+    "Which plant/location is this purchase for? Please provide the plant code.",
+    "What is the exact item name or item code?",
+    "How much quantity do you need?",
+    "What is the unit of measurement? (For example: KG, PCS, LTR, BOX)",
+    "When do you need this item delivered? Please use YYYY-MM-DD format.",
+    "What is the urgency? Reply Normal or Emergency.",
+    "Do you know the estimated unit price in INR? Enter the amount or type 'skip'.",
+  ];
+
+  const addMessage = (role: "assistant" | "user", text: string) => {
+    setHistory((previous) => [...previous, { role, text }]);
+  };
+
+  const handleReply = (event: React.FormEvent) => {
     event.preventDefault();
+    const answer = input.trim();
+    if (!answer) return;
+
     setError("");
-    setResult(null);
+
+    if (step === 0) {
+      setMessage(answer);
+    } else if (step === 1) {
+      setRequester(answer);
+    } else if (step === 2) {
+      setDepartment(answer);
+    } else if (step === 3) {
+      setPlant(answer.toUpperCase());
+    } else if (step === 4) {
+      setItem(answer);
+    } else if (step === 5) {
+      if (!Number.isFinite(Number(answer)) || Number(answer) <= 0) {
+        setError("Please enter a quantity greater than zero.");
+        return;
+      }
+      setQuantity(answer);
+    } else if (step === 6) {
+      setUom(answer.toUpperCase());
+    } else if (step === 7) {
+      const dateParts = answer.split("-").map(Number);
+      const validDate =
+        /^\d{4}-\d{2}-\d{2}$/.test(answer) &&
+        dateParts.length === 3 &&
+        new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]))
+          .toISOString()
+          .slice(0, 10) === answer;
+
+      if (!validDate) {
+        setError("Please enter the date in YYYY-MM-DD format.");
+        return;
+      }
+      setNeedByDate(answer);
+    } else if (step === 8) {
+      const normalized = answer.toLowerCase();
+      if (normalized !== "normal" && normalized !== "emergency") {
+        setError("Please reply Normal or Emergency.");
+        return;
+      }
+      setUrgency(normalized === "emergency" ? "Emergency" : "Normal");
+    } else if (step === 9) {
+      if (answer.toLowerCase() !== "skip") {
+        if (!Number.isFinite(Number(answer)) || Number(answer) < 0) {
+          setError("Enter a valid price or type 'skip'.");
+          return;
+        }
+        setEstimate(answer);
+      } else {
+        setEstimate("");
+      }
+    }
+
+    addMessage("user", answer);
+    setInput("");
+    setError("");
+
+    if (step < 9) {
+      const nextStep = step + 1;
+      setStep(nextStep);
+      addMessage("assistant", questions[nextStep]);
+    } else {
+      setStep(10);
+      addMessage(
+        "assistant",
+        "Thanks! I've collected the details. Please review your purchase request below. If everything is correct, confirm to submit it for procurement policy evaluation."
+      );
+    }
+  };
+
+  const submitRequest = async () => {
+    setError("");
     setBusy(true);
     try {
       const parsed = await apiRequest<ChatResult>("/chat/requests", {
@@ -737,37 +838,213 @@ function EmployeeChatPage() {
         }),
       });
       setResult(parsed);
+      addMessage("assistant", `Request ${parsed.pr_no} has been evaluated successfully.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to submit purchase request.");
     } finally {
       setBusy(false);
     }
   };
+
+  const restartChat = () => {
+    setStep(0);
+    setInput("");
+    setHistory([
+      {
+        role: "assistant",
+        text: "Let's create a new purchase request. Tell me what you need to purchase.",
+      },
+    ]);
+    setMessage("");
+    setRequester("");
+    setDepartment("");
+    setPlant("");
+    setItem("");
+    setQuantity("");
+    setUom("");
+    setNeedByDate("");
+    setUrgency("Normal");
+    setEstimate("");
+    setError("");
+    setResult(null);
+  };
+
   return (
     <div className="chat-layout">
-      <Panel title="New purchase request" subtitle="Tell us what you need, then complete the request details for a policy-based decision.">
+      <Panel
+        title="Procurement Chat"
+        subtitle="Create a purchase request through a guided conversational workflow."
+      >
         <div className="chat-thread">
-          <div className="chat-message assistant-message"><span className="assistant-avatar"><MessageSquareText size={16} /></span><div><strong>Procurement assistant</strong><p>Describe the item and your requirement. I’ll use the item master and procurement policy to resolve and evaluate it. Please include the requested delivery date and urgency below.</p></div></div>
-          <form onSubmit={(event) => void submit(event)} className="chat-form">
-            {error && <div className="notice-error" role="alert"><CircleAlert size={16} />{error}</div>}
-            <label className="field-label">Your request<textarea className="input chat-textarea" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="For example: Please arrange 200 nitrile gloves for the Chakan plant by next Friday." required /></label>
-            <div className="form-grid">
-              <label className="field-label">Requester<input className="input" value={requester} onChange={(event) => setRequester(event.target.value)} required /></label>
-              <label className="field-label">Department<input className="input" value={department} onChange={(event) => setDepartment(event.target.value)} required /></label>
-              <label className="field-label">Plant code<input className="input" value={plant} onChange={(event) => setPlant(event.target.value.toUpperCase())} placeholder="e.g. CHK1" required /></label>
-              <label className="field-label">Item name or item code<input className="input" value={item} onChange={(event) => setItem(event.target.value)} placeholder="Search the item master" required /></label>
-              <label className="field-label">Quantity<input className="input" type="number" step="0.001" min="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} required /></label>
-              <label className="field-label">Unit of measure<input className="input" value={uom} onChange={(event) => setUom(event.target.value.toUpperCase())} required /></label>
-              <label className="field-label">Need by<input className="input" type="date" value={needByDate} onChange={(event) => setNeedByDate(event.target.value)} required /></label>
-              <label className="field-label">Urgency<select className="input" value={urgency} onChange={(event) => setUrgency(event.target.value)}><option>Normal</option><option>Emergency</option></select></label>
-              <label className="field-label form-grid-wide">Estimated unit price (INR, if known)<input className="input" type="number" min="0" step="0.01" value={estimate} onChange={(event) => setEstimate(event.target.value)} placeholder="Required if this is a new item without a known price" /></label>
+          <div className="chat-conversation">
+            {history.map((entry, index) => (
+              <div
+                key={index}
+                className={`chat-message ${
+                  entry.role === "assistant" ? "assistant-message" : "user-message"
+                }`}
+              >
+                {entry.role === "assistant" && (
+                  <span className="assistant-avatar">
+                    <MessageSquareText size={16} />
+                  </span>
+                )}
+                <div>
+                  <strong>
+                    {entry.role === "assistant" ? "Procurement Assistant" : "You"}
+                  </strong>
+                  <p>{entry.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {step < 10 && !result && (
+            <form onSubmit={handleReply} className="chat-form">
+              {error && (
+                <div className="notice-error" role="alert">
+                  <CircleAlert size={16} />
+                  {error}
+                </div>
+              )}
+
+              <label className="field-label">
+                Your reply
+                <textarea
+                  className="input chat-textarea"
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder={
+                    step === 8
+                      ? "Type Normal or Emergency..."
+                      : step === 9
+                      ? "Enter estimated price or type skip..."
+                      : "Type your answer here..."
+                  }
+                  required
+                />
+              </label>
+
+              <div className="chat-submit-row">
+                <span>Step {step + 1} of 10</span>
+                <button className="button-primary" disabled={!input.trim()}>
+                  <ArrowRight size={16} />
+                  Send reply
+                </button>
+              </div>
+            </form>
+          )}
+
+          {step === 10 && !result && (
+            <div className="chat-review">
+              {error && (
+                <div className="notice-error" role="alert">
+                  <CircleAlert size={16} />
+                  {error}
+                </div>
+              )}
+
+              <div className="chat-result">
+                <div className="result-heading">
+                  <BadgeCheck size={19} />
+                  <div>
+                    <strong>Review Purchase Request</strong>
+                    <small>Confirm these details before submitting</small>
+                  </div>
+                </div>
+
+                <div className="chat-result-grid">
+                  <Detail label="Requester" value={requester} />
+                  <Detail label="Department" value={department} />
+                  <Detail label="Plant" value={plant} />
+                  <Detail label="Item" value={item} />
+                  <Detail label="Quantity" value={`${quantity} ${uom}`} />
+                  <Detail label="Need by date" value={needByDate} />
+                  <Detail label="Urgency" value={urgency} />
+                  <Detail
+                    label="Estimated unit price"
+                    value={estimate ? formatCurrency(Number(estimate)) : "Not provided"}
+                  />
+                </div>
+                <p><strong>Original requirement:</strong> {message}</p>
+              </div>
+
+              <div className="chat-submit-row">
+                <span>Submitting will evaluate this request against procurement policy.</span>
+                <button
+                  className="button-primary"
+                  onClick={() => void submitRequest()}
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <LoaderCircle size={16} className="animate-spin" />
+                  ) : (
+                    <BadgeCheck size={16} />
+                  )}
+                  Confirm &amp; Submit
+                </button>
+              </div>
+
+              <button className="button-secondary" onClick={restartChat}>
+                Start over
+              </button>
             </div>
-            <div className="chat-submit-row"><span>Submitting evaluates the request and records the decision.</span><button className="button-primary" disabled={busy}>{busy ? <LoaderCircle size={16} className="animate-spin" /> : <ArrowRight size={16} />} Submit request</button></div>
-          </form>
-          {result && <div className="chat-result"><div className="result-heading"><BadgeCheck size={19} /><div><strong>Request {result.pr_no} evaluated</strong><small>Resolved item {result.resolved_item_code} · Policy {result.policy_version} · Clause {result.clause}</small></div></div><div className="chat-result-grid"><Detail label="Decision" value={`${result.decision} · ${result.route}`} /><Detail label="Group value" value={formatCurrency(result.group_value_inr)} /><Detail label="Supplier" value={result.supplier_id ?? (result.suggested_supplier_ids.join(", ") || "No supplier selected")} /><Detail label="Unit price" value={formatCurrency(result.unit_price)} /></div><p>{result.reason}</p>{result.match_candidates.length > 1 && <small>Item match candidates: {result.match_candidates.map((candidate) => `${candidate.item_code} (${candidate.score})`).join(" · ")}</small>}</div>}
+          )}
+
+          {result && (
+            <div className="chat-result">
+              <div className="result-heading">
+                <BadgeCheck size={19} />
+                <div>
+                  <strong>Request {result.pr_no} evaluated</strong>
+                  <small>
+                    Resolved item {result.resolved_item_code} · Policy {result.policy_version} ·
+                    Clause {result.clause}
+                  </small>
+                </div>
+              </div>
+
+              <div className="chat-result-grid">
+                <Detail label="Decision" value={`${result.decision} · ${result.route}`} />
+                <Detail label="Group value" value={formatCurrency(result.group_value_inr)} />
+                <Detail
+                  label="Supplier"
+                  value={
+                    result.supplier_id ??
+                    (result.suggested_supplier_ids.join(", ") || "No supplier selected")
+                  }
+                />
+                <Detail label="Unit price" value={formatCurrency(result.unit_price)} />
+              </div>
+
+              <p>{result.reason}</p>
+
+              {result.match_candidates.length > 1 && (
+                <small>
+                  Item match candidates:{" "}
+                  {result.match_candidates
+                    .map((candidate) => `${candidate.item_code} (${candidate.score})`)
+                    .join(" · ")}
+                </small>
+              )}
+
+              <button className="button-secondary" onClick={restartChat}>
+                Create another request
+              </button>
+            </div>
+          )}
         </div>
       </Panel>
-      <div className="chat-side-note"><ShieldCheck size={20} /><strong>Policy-controlled evaluation</strong><p>Item resolution, valuation, supplier eligibility and decision routes are handled by the procurement backend. The chat interface does not make purchasing decisions.</p></div>
+
+      <div className="chat-side-note">
+        <ShieldCheck size={20} />
+        <strong>Policy-controlled evaluation</strong>
+        <p>
+          This chat collects request information. Item resolution, valuation,
+          supplier eligibility, and procurement decisions are performed by the
+          procurement backend using its policy engine.
+        </p>
+      </div>
     </div>
   );
 }
